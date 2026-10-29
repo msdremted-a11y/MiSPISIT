@@ -9,5 +9,6 @@
     xhost +local:docker
 
 Скачать и запустить образ:
+
     docker pull troykins/qt-ebpf-monitor:0.0.1
     docker run --rm -it -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix troykins/qt-ebpf-monitor:0.0.1
