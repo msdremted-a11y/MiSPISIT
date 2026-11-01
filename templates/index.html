@@ -1,0 +1,20 @@
+{{define "content"}}
+<h1>{{.Product}}</h1>
+<p class="lead">Инструмент для мониторинга нагрузки Linux-систем: снимки загрузки CPU и ввода-вывода для системного администратора.</p>
+<p class="muted">Версия {{.Version}}</p>
+
+<div class="cards">
+  <a class="action" href="/snapshots/new">
+    <b>Сохранить снимок нагрузки</b>
+    <span>Снять текущие значения из /proc или ввести вручную</span>
+  </a>
+  <a class="action" href="/snapshots">
+    <b>Посмотреть снимки</b>
+    <span>Сохранено снимков: {{.Data.Snapshots}}</span>
+  </a>
+  <a class="action" href="/rejected">
+    <b>Отклонённые снимки</b>
+    <span>Попыток с ошибкой: {{.Data.Rejected}}</span>
+  </a>
+</div>
+{{end}}

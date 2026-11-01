@@ -1,0 +1,27 @@
+{{define "title"}}Отказ — {{.Product}}{{end}}
+{{define "content"}}
+<h1>Снимок не сохранён</h1>
+{{with .Data.Current}}
+<div class="error">
+  <p><b>Кто пытался:</b> {{.Author}}</p>
+  <p><b>Что пытались сделать:</b> {{.Attempt}}</p>
+  <p><b>Почему система не приняла:</b> {{.Reason}}</p>
+  <p class="muted">{{dt .At}}</p>
+</div>
+{{else}}
+<p class="empty">Отклонённых попыток пока нет.</p>
+{{end}}
+<p><a class="button" href="/snapshots/new">Исправить и снять снова</a></p>
+
+{{if .Data.All}}
+<h2>Журнал отказов</h2>
+<table>
+  <thead><tr><th>№</th><th>Время</th><th>Кто</th><th>Причина</th></tr></thead>
+  <tbody>
+  {{range .Data.All}}
+    <tr><td><a href="/rejected?id={{.ID}}">{{.ID}}</a></td><td>{{dt .At}}</td><td>{{.Author}}</td><td>{{.Reason}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+{{end}}

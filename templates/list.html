@@ -1,0 +1,27 @@
+{{define "title"}}Снимки — {{.Product}}{{end}}
+{{define "content"}}
+<h1>Снимки нагрузки</h1>
+{{if .Data}}
+<table>
+  <thead>
+    <tr><th>№</th><th>Время</th><th>Кто снял</th><th>Источник</th><th>CPU, %</th><th>Задержка IO, мс</th><th>IOPS</th></tr>
+  </thead>
+  <tbody>
+  {{range .Data}}
+    <tr>
+      <td><a href="/snapshots/{{.ID}}">{{.ID}}</a></td>
+      <td><a href="/snapshots/{{.ID}}">{{dt .TakenAt}}</a></td>
+      <td>{{.Author}}</td>
+      <td>{{source .Source}}</td>
+      <td>{{.CPUPercent}}</td>
+      <td>{{.IOLatencyMs}}</td>
+      <td>{{.IOPS}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+{{else}}
+<p class="empty">Снимков пока нет. <a href="/snapshots/new">Сохраните первый снимок</a>.</p>
+{{end}}
+<p><a class="button" href="/snapshots/new">Новый снимок</a></p>
+{{end}}
