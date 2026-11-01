@@ -1,0 +1,16 @@
+{{define "title"}}Снимок №{{.Data.S.ID}} — {{.Product}}{{end}}
+{{define "content"}}
+{{with .Data}}
+{{if .Saved}}<p class="ok">Снимок сохранён.</p>{{end}}
+<h1>Снимок №{{.S.ID}}</h1>
+<dl>
+  <dt>Время</dt><dd>{{dt .S.TakenAt}}</dd>
+  <dt>Кто снял</dt><dd>{{.S.Author}}</dd>
+  <dt>Источник</dt><dd>{{source .S.Source}}</dd>
+  <dt>Загрузка CPU</dt><dd>{{.S.CPUPercent}} %</dd>
+  <dt>Средняя задержка IO</dt><dd>{{.S.IOLatencyMs}} мс</dd>
+  <dt>IOPS</dt><dd>{{.S.IOPS}} оп/с</dd>
+</dl>
+{{end}}
+<p><a class="button" href="/snapshots">Ко всем снимкам</a> <a href="/snapshots/new">Новый снимок</a></p>
+{{end}}

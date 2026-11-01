@@ -1,14 +1,38 @@
 # Системный монитор на базе eBPF + Qt
 
-Инструмент для мониторинга системных вызовов и сетевой активности
-в Linux с использованием eBPF.
+Инструмент для мониторинга нагрузки Linux-систем: снимки загрузки CPU и
+ввода-вывода для системного администратора.
+
+Версия 0.0.2 — три главные функции в веб-части на Go (`html/template`).
+Окно Qt из версии 0.0.1 остаётся клиентским интерфейсом (папка `qt-client/`).
 
 ## Запуск
 
-Разрешить Docker доступ к X-серверу:
-    xhost +local:docker
+    docker pull troykins/qt-ebpf-monitor:0.0.2
+    docker run --rm -p 8080:8080 troykins/qt-ebpf-monitor:0.0.2
 
-Скачать и запустить образ:
+После запуска откройте http://localhost:8080
 
-    docker pull troykins/qt-ebpf-monitor:0.0.1
-    docker run --rm -it -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix troykins/qt-ebpf-monitor:0.0.1
+## Адреса
+
+| Адрес | Что открывается |
+|---|---|
+| `/` | Главная: название, версия, переходы к функциям |
+| `/snapshots/new` | Форма: сохранить снимок нагрузки (из `/proc` или вручную) |
+| `/snapshots` | Список сохранённых снимков |
+| `/snapshots/1` | Карточка одного снимка |
+| `/rejected` | Отказ: кто пытался сохранить снимок и почему он не принят |
+
+Данные пока лежат в файле `data/snapshots.json` внутри контейнера и живут, пока контейнер запущен.
+
+## Структура
+
+    cmd/web/main.go              запуск сервера и адреса страниц
+    internal/actions/            три функции: сохранить, показать, отклонить
+    internal/storage/            чтение и запись JSON-файла
+    internal/procstat/           снятие нагрузки из /proc/stat и /proc/diskstats
+    templates/                   шаблоны страниц (Go html/template)
+    static/style.css             оформление
+    data/snapshots.json          демо-данные
+    qt-client/                   окно Qt из ЛР1 (клиентский интерфейс)
+    Dockerfile                   образ веб-части, linux/amd64 и linux/arm64

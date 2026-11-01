@@ -1,0 +1,30 @@
+{{define "title"}}Новый снимок — {{.Product}}{{end}}
+{{define "content"}}
+<h1>Новый снимок нагрузки</h1>
+<form method="post" action="/snapshots">
+  <label>Кто снимает
+    <input name="author" value="admin">
+  </label>
+
+  <fieldset>
+    <legend>Способ 1. Снять автоматически</legend>
+    <p class="muted">Система прочитает /proc/stat и /proc/diskstats дважды с интервалом 0,5 с и посчитает нагрузку.</p>
+    <button name="mode" value="proc">Снять сейчас из /proc</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Способ 2. Ввести вручную</legend>
+    <label>Загрузка CPU, % (0–100)
+      <input name="cpu_percent" inputmode="decimal" placeholder="например, 42.5">
+    </label>
+    <label>Средняя задержка IO, мс (0–10000)
+      <input name="io_latency_ms" inputmode="decimal" placeholder="например, 3.2">
+    </label>
+    <label>IOPS, операций в секунду
+      <input name="iops" inputmode="decimal" placeholder="например, 120">
+    </label>
+    <button name="mode" value="manual">Сохранить введённые значения</button>
+  </fieldset>
+</form>
+<p class="muted">Пустая метрика или значение вне диапазона (например, CPU = 150 %) не сохраняется — откроется страница отказа.</p>
+{{end}}

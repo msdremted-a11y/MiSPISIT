@@ -1,0 +1,31 @@
+{
+  "snapshots": [
+    {
+      "id": 1,
+      "taken_at": "2026-11-01T09:00:00Z",
+      "author": "admin",
+      "source": "manual",
+      "cpu_percent": 23.5,
+      "io_latency_ms": 1.8,
+      "iops": 85
+    },
+    {
+      "id": 2,
+      "taken_at": "2026-11-01T09:05:00Z",
+      "author": "admin",
+      "source": "manual",
+      "cpu_percent": 91.2,
+      "io_latency_ms": 12.4,
+      "iops": 640
+    }
+  ],
+  "rejected": [
+    {
+      "id": 1,
+      "at": "2026-11-01T09:07:00Z",
+      "author": "admin",
+      "attempt": "сохранить снимок вручную: CPU = 150 %, задержка IO = 2 мс, IOPS = 100",
+      "reason": "«загрузка CPU» = 150 % вне допустимого диапазона 0–100 %"
+    }
+  ]
+}
