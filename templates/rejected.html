@@ -1,17 +1,34 @@
 {{define "title"}}Отказ — {{.Product}}{{end}}
 {{define "content"}}
-<h1>Снимок не сохранён</h1>
 {{with .Data.Current}}
+<h1>Снимок не сохранён</h1>
 <div class="error">
   <p><b>Кто пытался:</b> {{.Author}}</p>
   <p><b>Что пытались сделать:</b> {{.Attempt}}</p>
   <p><b>Почему система не приняла:</b> {{.Reason}}</p>
   <p class="muted">{{dt .At}}</p>
 </div>
-{{else}}
-<p class="empty">Отклонённых попыток пока нет.</p>
-{{end}}
 <p><a class="button" href="/snapshots/new">Исправить и снять снова</a></p>
+{{else}}
+<h1>Отклонённые снимки</h1>
+<div class="empty">
+  <p>Отклонённых попыток пока нет.</p>
+  <p>Система не сохраняет снимок, если:</p>
+  <ul>
+    <li>не указано, кто снимает снимок;</li>
+    <li>не указана метрика (снимок без метрики);</li>
+    <li>значение не число или вне диапазона: CPU 0–100 %, задержка IO 0–10000 мс, IOPS не меньше 0.</li>
+  </ul>
+  <form method="post" action="/snapshots">
+    <input type="hidden" name="mode" value="manual">
+    <input type="hidden" name="author" value="admin">
+    <input type="hidden" name="cpu_percent" value="150">
+    <input type="hidden" name="io_latency_ms" value="2">
+    <input type="hidden" name="iops" value="100">
+    <button>Проверить: отправить снимок с CPU = 150 %</button>
+  </form>
+</div>
+{{end}}
 
 {{if .Data.All}}
 <h2>Журнал отказов</h2>
