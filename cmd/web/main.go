@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"html/template"
 	"log"
 	"net/http"
@@ -18,7 +19,7 @@ import (
 
 const (
 	product = "Системный монитор на базе eBPF + Qt"
-	version = "0.0.2"
+	version = "0.0.3"
 )
 
 type server struct {
@@ -41,13 +42,17 @@ func env(key, def string) string {
 
 func main() {
 	dir := env("APP_DIR", ".")
-	store, err := storage.OpenJSON(env("DATA_FILE", filepath.Join(dir, "data", "snapshots.json")))
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatal("не задана переменная DATABASE_URL (адрес базы PostgreSQL)")
+	}
+	store, err := storage.OpenPostgres(dbURL, 30)
 	if err != nil {
-		log.Fatalf("не удалось открыть данные: %v", err)
+		log.Fatalf("не удалось подключиться к базе: %v", err)
 	}
 
 	funcs := template.FuncMap{
-		"dt": func(t time.Time) string { return t.Format("02.01.2006 15:04:05") + " UTC" },
+		"dt": func(t time.Time) string { return t.UTC().Format("02.01.2006 15:04:05") + " UTC" },
 		"source": func(s string) string {
 			if s == "proc" {
 				return "автоматически из /proc"
@@ -56,7 +61,7 @@ func main() {
 		},
 	}
 	pages := map[string]*template.Template{}
-	for _, name := range []string{"index", "list", "form", "card", "rejected", "notfound"} {
+	for _, name := range []string{"index", "list", "form", "card", "rejected", "notfound", "error"} {
 		pages[name] = template.Must(template.New("layout.html").Funcs(funcs).ParseFiles(
 			filepath.Join(dir, "templates", "layout.html"),
 			filepath.Join(dir, "templates", name+".html"),
@@ -95,16 +100,30 @@ func (s *server) render(w http.ResponseWriter, status int, name, active string, 
 	}
 }
 
+// fail показывает страницу ошибки, если база недоступна.
+func (s *server) fail(w http.ResponseWriter, err error) {
+	log.Printf("ошибка базы: %v", err)
+	s.render(w, http.StatusInternalServerError, "error", "", "База данных сейчас недоступна. Попробуйте обновить страницу через несколько секунд.")
+}
+
 // GET / — главная.
 func (s *server) index(w http.ResponseWriter, r *http.Request) {
-	s.render(w, http.StatusOK, "index", "home", map[string]int{
-		"Snapshots": len(s.svc.List()), "Rejected": len(s.svc.Rejections()),
-	})
+	snaps, rej, err := s.svc.Counts()
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	s.render(w, http.StatusOK, "index", "home", map[string]int{"Snapshots": snaps, "Rejected": rej})
 }
 
 // GET /snapshots — функция 2: список снимков.
 func (s *server) list(w http.ResponseWriter, r *http.Request) {
-	s.render(w, http.StatusOK, "list", "list", s.svc.List())
+	list, err := s.svc.List()
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	s.render(w, http.StatusOK, "list", "list", list)
 }
 
 // GET /snapshots/new — форма функции 1.
@@ -126,7 +145,7 @@ func (s *server) create(w http.ResponseWriter, r *http.Request) {
 		IOPS:        r.FormValue("iops"),
 	})
 	if err != nil {
-		http.Error(w, "не удалось записать данные: "+err.Error(), http.StatusInternalServerError)
+		s.fail(w, err)
 		return
 	}
 	if rej != nil {
@@ -138,11 +157,18 @@ func (s *server) create(w http.ResponseWriter, r *http.Request) {
 
 // GET /snapshots/{id} — функция 2: карточка снимка.
 func (s *server) card(w http.ResponseWriter, r *http.Request) {
-	if id, err := strconv.Atoi(r.PathValue("id")); err == nil {
-		if sn, err := s.svc.Get(id); err == nil {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err == nil {
+		var sn storage.Snapshot
+		sn, err = s.svc.Get(id)
+		if err == nil {
 			s.render(w, http.StatusOK, "card", "list", map[string]any{
 				"S": sn, "Saved": r.URL.Query().Get("saved") == "1",
 			})
+			return
+		}
+		if !errors.Is(err, storage.ErrNotFound) {
+			s.fail(w, err)
 			return
 		}
 	}
@@ -151,7 +177,11 @@ func (s *server) card(w http.ResponseWriter, r *http.Request) {
 
 // GET /rejected — функция 3: страница отказа.
 func (s *server) rejected(w http.ResponseWriter, r *http.Request) {
-	all := s.svc.Rejections()
+	all, err := s.svc.Rejections()
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
 	var current *storage.Rejection
 	if id, err := strconv.Atoi(r.URL.Query().Get("id")); err == nil {
 		for i := range all {

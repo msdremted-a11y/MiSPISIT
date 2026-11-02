@@ -1,4 +1,4 @@
-// Пакет actions — три главные функции ЛР2:
+// Пакет actions — три главные функции системы:
 //  1. сохранить снимок нагрузки (изменение данных);
 //  2. показать снимки и карточку снимка (просмотр);
 //  3. отклонить снимок без метрики или с недопустимым значением (отказ).
@@ -14,13 +14,15 @@ import (
 	"github.com/msdremted-a11y/MiSPISIT/internal/storage"
 )
 
-// Store — то, что функциям нужно от хранилища. В ЛР2 это JSON, в ЛР3 будет PostgreSQL.
+// Store — то, что функциям нужно от хранилища (с ЛР3 — PostgreSQL).
 type Store interface {
 	AddSnapshot(storage.Snapshot) (storage.Snapshot, error)
-	ListSnapshots() []storage.Snapshot
+	ListSnapshots() ([]storage.Snapshot, error)
 	GetSnapshot(id int) (storage.Snapshot, error)
+	CountSnapshots() (int, error)
 	AddRejection(storage.Rejection) (storage.Rejection, error)
-	ListRejections() []storage.Rejection
+	ListRejections() ([]storage.Rejection, error)
+	CountRejections() (int, error)
 }
 
 // Input — данные формы /snapshots/new.
@@ -76,13 +78,22 @@ func (s *Service) Create(in Input) (storage.Snapshot, *storage.Rejection, error)
 }
 
 // List — функция 2: последние снимки.
-func (s *Service) List() []storage.Snapshot { return s.Store.ListSnapshots() }
+func (s *Service) List() ([]storage.Snapshot, error) { return s.Store.ListSnapshots() }
 
 // Get — функция 2: карточка одного снимка.
 func (s *Service) Get(id int) (storage.Snapshot, error) { return s.Store.GetSnapshot(id) }
 
 // Rejections — функция 3: журнал отказов.
-func (s *Service) Rejections() []storage.Rejection { return s.Store.ListRejections() }
+func (s *Service) Rejections() ([]storage.Rejection, error) { return s.Store.ListRejections() }
+
+// Counts — число снимков и отказов для главной страницы.
+func (s *Service) Counts() (snapshots, rejected int, err error) {
+	if snapshots, err = s.Store.CountSnapshots(); err != nil {
+		return
+	}
+	rejected, err = s.Store.CountRejections()
+	return
+}
 
 func (s *Service) reject(author, attempt, reason string) (storage.Snapshot, *storage.Rejection, error) {
 	r, err := s.Store.AddRejection(storage.Rejection{
