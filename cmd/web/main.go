@@ -19,18 +19,19 @@ import (
 
 const (
 	product = "Системный монитор на базе eBPF + Qt"
-	version = "0.0.3"
+	version = "0.0.4"
 )
 
 type server struct {
-	svc   *actions.Service
-	pages map[string]*template.Template
+	svc     *actions.Service
+	pages   map[string]*template.Template
+	grafana string // адрес панели Grafana для ссылок в меню
 }
 
 // page — общие данные для всех шаблонов.
 type page struct {
-	Product, Version, Active string
-	Data                     any
+	Product, Version, Active, Grafana string
+	Data                              any
 }
 
 func env(key, def string) string {
@@ -74,7 +75,8 @@ func main() {
 			Measure: func() (procstat.Metrics, error) { return procstat.Measure(500 * time.Millisecond) },
 			Now:     time.Now,
 		},
-		pages: pages,
+		pages:   pages,
+		grafana: env("GRAFANA_URL", "http://localhost:3000"),
 	}
 
 	mux := http.NewServeMux()
@@ -95,7 +97,7 @@ func main() {
 func (s *server) render(w http.ResponseWriter, status int, name, active string, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	if err := s.pages[name].Execute(w, page{product, version, active, data}); err != nil {
+	if err := s.pages[name].Execute(w, page{product, version, active, s.grafana, data}); err != nil {
 		log.Printf("шаблон %s: %v", name, err)
 	}
 }
