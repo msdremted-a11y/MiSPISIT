@@ -1,0 +1,18 @@
+# Источник данных Grafana: база PostgreSQL из сервиса db.
+# Подключается при старте Grafana, вручную ничего настраивать не нужно.
+apiVersion: 1
+datasources:
+  - name: app
+    uid: app
+    type: grafana-postgresql-datasource
+    url: db:5432
+    user: app
+    isDefault: true
+    editable: false
+    jsonData:
+      database: app
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    secureJsonData:
+      password: app

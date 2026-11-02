@@ -3,52 +3,55 @@
 Инструмент для мониторинга нагрузки Linux-систем: снимки загрузки CPU и
 ввода-вывода для системного администратора.
 
-Версия 0.0.3 — три главные функции хранят данные в PostgreSQL.
-Приложение и база поднимаются вместе одной командой.
-Окно Qt из версии 0.0.1 остаётся клиентским интерфейсом (папка `qt-client/`).
+Версия 0.0.4 — к страницам трёх функций добавлена панель Grafana по данным базы.
+Приложение, база и панель поднимаются вместе одной командой.
+Окно Qt остаётся клиентским интерфейсом (папка `qt-client/`) и в эту версию не входит.
 
 ## Запуск
 
     Репозиторий: https://github.com/msdremted-a11y/MiSPISIT
-    Ветка: lab3
-    Pull Request: https://github.com/msdremted-a11y/MiSPISIT/pull/3
-    Образ: troykins/qt-ebpf-monitor:0.0.3
+    Ветка: lab4
+    Pull Request: https://github.com/msdremted-a11y/MiSPISIT/pull/4
+    Образ: troykins/qt-ebpf-monitor:0.0.4
     Страница образа: https://hub.docker.com/r/troykins/qt-ebpf-monitor
 
-    git clone -b lab3 https://github.com/msdremted-a11y/MiSPISIT
+    git clone -b lab4 https://github.com/msdremted-a11y/MiSPISIT
     cd MiSPISIT
     docker compose up -d
 
-После запуска откройте http://localhost:8080
-
-Проверка сохранности: `docker compose down`, затем снова `docker compose up -d` —
-записи на месте, потому что база хранит файлы в томе `dbdata`.
+Страницы системы: http://localhost:8080
+Панель Grafana: http://localhost:3000 (открывается сразу, без входа)
 
 ## Адреса
 
 | Адрес | Что открывается |
 |---|---|
-| `/` | Главная: название, версия, переходы к функциям |
-| `/snapshots/new` | Форма: сохранить снимок нагрузки (из `/proc` или вручную) |
-| `/snapshots` | Список сохранённых снимков |
-| `/snapshots/1` | Карточка одного снимка |
-| `/rejected` | Отказ: кто пытался сохранить снимок и почему он не принят |
+| http://localhost:8080/ | Главная: название, версия, переходы к функциям и к панели |
+| http://localhost:8080/snapshots/new | Форма: сохранить снимок нагрузки (из `/proc` или вручную) |
+| http://localhost:8080/snapshots | Список сохранённых снимков |
+| http://localhost:8080/snapshots/1 | Карточка одного снимка |
+| http://localhost:8080/rejected | Отказ: кто пытался сохранить снимок и почему он не принят |
+| http://localhost:3000 | Панель Grafana «Системный монитор eBPF + Qt — 0.0.4» |
 
-## Хранение
+## Сервисы
 
-PostgreSQL 16 (`postgres:16`), отдельный сервис `db`. Таблицы `snapshot` и `rejection`
-приложение создаёт само при запуске. Адрес базы приложение берёт из переменной
-`DATABASE_URL`, её задаёт `docker-compose.yml`.
+| Сервис | Образ | Порт | Назначение |
+|---|---|---|---|
+| `app` | `troykins/qt-ebpf-monitor:0.0.4` | 8080 | Страницы трёх функций (Go, html/template) |
+| `db` | `postgres:16` | наружу не открыт | Хранение снимков и отказов, том `dbdata` |
+| `dashboard` | `grafana/grafana:11.4.0` | 3000 | Панель по данным базы, ходит в `db` по имени сервиса |
+
+Источник данных и экран Grafana лежат в `grafana/provisioning` и подключаются при старте.
 
 ## Структура
 
-    cmd/web/main.go              запуск сервера и адреса страниц
-    internal/actions/            три функции: сохранить, показать, отклонить
-    internal/storage/            работа с PostgreSQL, создание таблиц
-    internal/procstat/           снятие нагрузки из /proc/stat и /proc/diskstats
-    templates/                   шаблоны страниц (Go html/template)
-    static/style.css             оформление
-    qt-client/                   окно Qt из ЛР1 (клиентский интерфейс)
-    go.mod, go.sum               зависимости Go (драйвер lib/pq)
-    Dockerfile                   образ приложения, linux/amd64 и linux/arm64
-    docker-compose.yml           приложение и база вместе
+    cmd/web/main.go                         запуск сервера и адреса страниц
+    internal/actions/                       три функции: сохранить, показать, отклонить
+    internal/storage/                       работа с PostgreSQL, создание таблиц
+    internal/procstat/                      снятие нагрузки из /proc/stat и /proc/diskstats
+    templates/, static/                     шаблоны страниц и оформление
+    grafana/provisioning/datasources/       источник данных app (PostgreSQL, сервис db)
+    grafana/provisioning/dashboards/        экран monitor.json и его подключение
+    qt-client/                              окно Qt (клиентский интерфейс)
+    Dockerfile                              образ приложения, linux/amd64 и linux/arm64
+    docker-compose.yml                      приложение, база и панель вместе

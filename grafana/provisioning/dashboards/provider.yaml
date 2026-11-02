@@ -1,0 +1,9 @@
+# Grafana подхватывает экраны (JSON-файлы) из этой папки при старте.
+apiVersion: 1
+providers:
+  - name: app
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/provisioning/dashboards

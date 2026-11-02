@@ -14,6 +14,7 @@
     <a href="/snapshots" {{if eq .Active "list"}}class="active"{{end}}>Снимки</a>
     <a href="/snapshots/new" {{if eq .Active "new"}}class="active"{{end}}>Новый снимок</a>
     <a href="/rejected" {{if eq .Active "rejected"}}class="active"{{end}}>Отказы</a>
+    <a href="{{.Grafana}}">Панель Grafana</a>
   </nav>
 </header>
 <main>

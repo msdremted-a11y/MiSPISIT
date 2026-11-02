@@ -2,11 +2,12 @@ name: mispisit-troykin
 
 services:
   app:
-    image: troykins/qt-ebpf-monitor:0.0.3
+    image: troykins/qt-ebpf-monitor:0.0.4
     ports:
       - "8080:8080"
     environment:
       DATABASE_URL: postgres://app:app@db:5432/app?sslmode=disable
+      GRAFANA_URL: http://localhost:3000
     depends_on:
       db:
         condition: service_healthy
@@ -24,6 +25,24 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+
+  dashboard:
+    image: grafana/grafana:11.4.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: app
+      GF_SECURITY_ADMIN_PASSWORD: app
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/monitor.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - app
 
 volumes:
   dbdata:
