@@ -19,7 +19,7 @@ import (
 
 const (
 	product = "Системный монитор на базе eBPF + Qt"
-	version = "0.0.4"
+	version = "0.0.5"
 )
 
 type server struct {
@@ -62,7 +62,7 @@ func main() {
 		},
 	}
 	pages := map[string]*template.Template{}
-	for _, name := range []string{"index", "list", "form", "card", "rejected", "notfound", "error"} {
+	for _, name := range []string{"index", "list", "form", "card", "rejected", "notifications", "notfound", "error"} {
 		pages[name] = template.Must(template.New("layout.html").Funcs(funcs).ParseFiles(
 			filepath.Join(dir, "templates", "layout.html"),
 			filepath.Join(dir, "templates", name+".html"),
@@ -86,6 +86,9 @@ func main() {
 	mux.HandleFunc("POST /snapshots", s.create)
 	mux.HandleFunc("GET /snapshots/{id}", s.card)
 	mux.HandleFunc("GET /rejected", s.rejected)
+	mux.HandleFunc("GET /notifications", s.notifications)
+	mux.HandleFunc("POST /notifications/{id}/read", s.readNotification)
+	mux.HandleFunc("POST /notifications/read-all", s.readAllNotifications)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir(filepath.Join(dir, "static")))))
 	mux.HandleFunc("/", s.notFound)
 
@@ -110,12 +113,12 @@ func (s *server) fail(w http.ResponseWriter, err error) {
 
 // GET / — главная.
 func (s *server) index(w http.ResponseWriter, r *http.Request) {
-	snaps, rej, err := s.svc.Counts()
+	snaps, rej, unread, err := s.svc.Counts()
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
-	s.render(w, http.StatusOK, "index", "home", map[string]int{"Snapshots": snaps, "Rejected": rej})
+	s.render(w, http.StatusOK, "index", "home", map[string]int{"Snapshots": snaps, "Rejected": rej, "Unread": unread})
 }
 
 // GET /snapshots — функция 2: список снимков.
@@ -200,4 +203,52 @@ func (s *server) rejected(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) notFound(w http.ResponseWriter, r *http.Request) {
 	s.render(w, http.StatusNotFound, "notfound", "", "Страницы «"+r.URL.Path+"» нет.")
+}
+
+// noteView — строка таблицы уведомлений.
+type noteView struct {
+	N   storage.Notification
+	New bool
+}
+
+// GET /notifications — экран ЛР5: сообщения о сохранённых снимках.
+func (s *server) notifications(w http.ResponseWriter, r *http.Request) {
+	all, err := s.svc.Notifications()
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	items := make([]noteView, 0, len(all))
+	unread := 0
+	for _, n := range all {
+		isNew := n.Status == "new"
+		if isNew {
+			unread++
+		}
+		items = append(items, noteView{N: n, New: isNew})
+	}
+	s.render(w, http.StatusOK, "notifications", "notifications", map[string]any{"Items": items, "Unread": unread})
+}
+
+// POST /notifications/{id}/read — отметить одно сообщение прочитанным.
+func (s *server) readNotification(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		s.render(w, http.StatusNotFound, "notfound", "", "Уведомления «"+r.PathValue("id")+"» нет.")
+		return
+	}
+	if err := s.svc.MarkRead(id); err != nil && !errors.Is(err, storage.ErrNotFound) {
+		s.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/notifications", http.StatusSeeOther)
+}
+
+// POST /notifications/read-all — отметить прочитанными все сообщения.
+func (s *server) readAllNotifications(w http.ResponseWriter, r *http.Request) {
+	if err := s.svc.MarkAllRead(); err != nil {
+		s.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/notifications", http.StatusSeeOther)
 }

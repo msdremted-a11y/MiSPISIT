@@ -23,6 +23,11 @@ type Store interface {
 	AddRejection(storage.Rejection) (storage.Rejection, error)
 	ListRejections() ([]storage.Rejection, error)
 	CountRejections() (int, error)
+	AddNotification(storage.Notification) (storage.Notification, error)
+	ListNotifications() ([]storage.Notification, error)
+	MarkNotificationRead(id int) error
+	MarkAllNotificationsRead() error
+	CountUnreadNotifications() (int, error)
 }
 
 // Input — данные формы /snapshots/new.
@@ -74,6 +79,19 @@ func (s *Service) Create(in Input) (storage.Snapshot, *storage.Rejection, error)
 	}
 
 	saved, err := s.Store.AddSnapshot(sn)
+	if err != nil {
+		return saved, nil, err
+	}
+
+	// Событие ЛР5: о сохранённом снимке узнаёт администратор —
+	// в таблицу notification кладётся новое непрочитанное сообщение.
+	_, err = s.Store.AddNotification(storage.Notification{
+		At:         s.Now().UTC(),
+		SnapshotID: saved.ID,
+		Message: fmt.Sprintf("Снимок №%d сохранён: %s, CPU %.1f %%, задержка IO %.1f мс, %.0f IOPS",
+			saved.ID, saved.Author, saved.CPUPercent, saved.IOLatencyMs, saved.IOPS),
+		Status: "new",
+	})
 	return saved, nil, err
 }
 
@@ -86,14 +104,28 @@ func (s *Service) Get(id int) (storage.Snapshot, error) { return s.Store.GetSnap
 // Rejections — функция 3: журнал отказов.
 func (s *Service) Rejections() ([]storage.Rejection, error) { return s.Store.ListRejections() }
 
-// Counts — число снимков и отказов для главной страницы.
-func (s *Service) Counts() (snapshots, rejected int, err error) {
+// Counts — число снимков, отказов и непрочитанных уведомлений для главной страницы.
+func (s *Service) Counts() (snapshots, rejected, unread int, err error) {
 	if snapshots, err = s.Store.CountSnapshots(); err != nil {
 		return
 	}
-	rejected, err = s.Store.CountRejections()
+	if rejected, err = s.Store.CountRejections(); err != nil {
+		return
+	}
+	unread, err = s.Store.CountUnreadNotifications()
 	return
 }
+
+// Notifications — экран ЛР5: все уведомления, новые сверху.
+func (s *Service) Notifications() ([]storage.Notification, error) {
+	return s.Store.ListNotifications()
+}
+
+// MarkRead — отметить одно уведомление прочитанным.
+func (s *Service) MarkRead(id int) error { return s.Store.MarkNotificationRead(id) }
+
+// MarkAllRead — отметить прочитанными все новые уведомления.
+func (s *Service) MarkAllRead() error { return s.Store.MarkAllNotificationsRead() }
 
 func (s *Service) reject(author, attempt, reason string) (storage.Snapshot, *storage.Rejection, error) {
 	r, err := s.Store.AddRejection(storage.Rejection{

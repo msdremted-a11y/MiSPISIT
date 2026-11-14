@@ -1,10 +1,10 @@
 {
   "uid": "monitor",
-  "title": "Системный монитор eBPF + Qt — 0.0.4",
+  "title": "Системный монитор eBPF + Qt — 0.0.5",
   "description": "Снимки нагрузки из базы PostgreSQL (сервис db)",
   "tags": [
     "mispisit",
-    "0.0.4"
+    "0.0.5"
   ],
   "timezone": "browser",
   "editable": false,
