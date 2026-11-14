@@ -32,6 +32,16 @@ type Rejection struct {
 	Reason  string // почему система не приняла
 }
 
+// Notification — уведомление о сохранённом снимке (ЛР5).
+// Живёт в отдельной таблице: это событие, а не поле старой записи.
+type Notification struct {
+	ID         int
+	At         time.Time
+	SnapshotID int    // какая запись вызвала уведомление
+	Message    string // что произошло
+	Status     string // "new" — ещё не прочитано, "read" — прочитано
+}
+
 // ErrNotFound — записи с таким номером нет.
 var ErrNotFound = errors.New("запись не найдена")
 
@@ -53,7 +63,16 @@ CREATE TABLE IF NOT EXISTS rejection (
     author  TEXT        NOT NULL,
     attempt TEXT        NOT NULL,
     reason  TEXT        NOT NULL
-);`
+);
+
+CREATE TABLE IF NOT EXISTS notification (
+    id          SERIAL PRIMARY KEY,
+    at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    snapshot_id INTEGER     NOT NULL REFERENCES snapshot (id),
+    message     TEXT        NOT NULL,
+    status      TEXT        NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'read'))
+);
+CREATE INDEX IF NOT EXISTS notification_at_idx ON notification (at DESC);`
 
 // Postgres хранит снимки и отказы в PostgreSQL.
 type Postgres struct{ db *sql.DB }
@@ -163,5 +182,63 @@ func (p *Postgres) ListRejections() ([]Rejection, error) {
 func (p *Postgres) CountRejections() (int, error) {
 	var n int
 	err := p.db.QueryRow(`SELECT count(*) FROM rejection`).Scan(&n)
+	return n, err
+}
+
+// AddNotification записывает уведомление о событии и возвращает его с номером.
+func (p *Postgres) AddNotification(n Notification) (Notification, error) {
+	if n.Status == "" {
+		n.Status = "new"
+	}
+	err := p.db.QueryRow(
+		`INSERT INTO notification (at, snapshot_id, message, status)
+		 VALUES ($1, $2, $3, $4) RETURNING id`,
+		n.At, n.SnapshotID, n.Message, n.Status,
+	).Scan(&n.ID)
+	return n, err
+}
+
+// ListNotifications возвращает последние уведомления, новые сверху.
+func (p *Postgres) ListNotifications() ([]Notification, error) {
+	rows, err := p.db.Query(
+		`SELECT id, at, snapshot_id, message, status
+		 FROM notification ORDER BY at DESC, id DESC LIMIT 100`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Notification
+	for rows.Next() {
+		var n Notification
+		if err := rows.Scan(&n.ID, &n.At, &n.SnapshotID, &n.Message, &n.Status); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// MarkNotificationRead переводит одно уведомление в статус «прочитано».
+func (p *Postgres) MarkNotificationRead(id int) error {
+	res, err := p.db.Exec(`UPDATE notification SET status = 'read' WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// MarkAllNotificationsRead переводит все новые уведомления в «прочитано».
+func (p *Postgres) MarkAllNotificationsRead() error {
+	_, err := p.db.Exec(`UPDATE notification SET status = 'read' WHERE status = 'new'`)
+	return err
+}
+
+// CountUnreadNotifications возвращает число непрочитанных уведомлений.
+func (p *Postgres) CountUnreadNotifications() (int, error) {
+	var n int
+	err := p.db.QueryRow(`SELECT count(*) FROM notification WHERE status = 'new'`).Scan(&n)
 	return n, err
 }

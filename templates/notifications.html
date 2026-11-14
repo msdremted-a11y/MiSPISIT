@@ -1,0 +1,35 @@
+{{define "title"}}Уведомления — {{.Product}}{{end}}
+{{define "content"}}
+<h1>Уведомления</h1>
+{{with .Data}}
+{{if .Items}}
+<p class="muted">Непрочитанных: {{.Unread}}</p>
+{{if .Unread}}
+<form method="post" action="/notifications/read-all" class="inline">
+  <button type="submit">Отметить все прочитанными</button>
+</form>
+{{end}}
+<table>
+  <tr><th>Время</th><th>Сообщение</th><th>Запись</th><th>Статус</th><th></th></tr>
+  {{range .Items}}
+  <tr{{if .New}} class="new"{{end}}>
+    <td>{{dt .N.At}}</td>
+    <td>{{.N.Message}}</td>
+    <td><a href="/snapshots/{{.N.SnapshotID}}">снимок №{{.N.SnapshotID}}</a></td>
+    <td>{{if .New}}новое{{else}}прочитано{{end}}</td>
+    <td>
+      {{if .New}}
+      <form method="post" action="/notifications/{{.N.ID}}/read" class="inline">
+        <button type="submit">Прочитано</button>
+      </form>
+      {{end}}
+    </td>
+  </tr>
+  {{end}}
+</table>
+{{else}}
+<p class="empty">Уведомлений пока нет. Сохраните снимок нагрузки — здесь появится сообщение о нём.</p>
+<p><a class="button" href="/snapshots/new">Новый снимок</a></p>
+{{end}}
+{{end}}
+{{end}}
