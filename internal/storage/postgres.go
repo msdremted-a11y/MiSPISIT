@@ -45,7 +45,7 @@ type Notification struct {
 
 // Probe — пробник eBPF, собранный в конструкторе (курсовая).
 // Пользователь задаёт смысловые параметры, система сама генерирует
-// строку мини-языка (DSL) и скрипт bpftrace.
+// скрипт (строку предметного языка) и код bpftrace.
 type Probe struct {
 	ID        int
 	Name      string // имя пробника, которое дал пользователь
@@ -53,7 +53,7 @@ type Probe struct {
 	Process   string // фильтр по имени процесса (comm), пусто = все процессы
 	Agg       string // count, bytes, avg_latency_ms
 	IntervalS int    // период снятия замера, секунды
-	DSL       string // строка мини-языка, сгенерированная из параметров
+	DSL       string // скрипт (строка предметного языка), сгенерированный из параметров
 	Bpftrace  string // сгенерированный скрипт bpftrace
 	Status    string // active — работает, paused — на паузе
 	CreatedAt time.Time

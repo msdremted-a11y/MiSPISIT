@@ -5,7 +5,7 @@
 сервис probe-runner выполняет его и пишет замеры в базу.</p>
 {{if .Data}}
 <table>
-  <tr><th>Имя</th><th>Что наблюдает</th><th>Строка языка</th><th>Статус</th><th>Последний замер</th></tr>
+  <tr><th>Имя</th><th>Что наблюдает</th><th>Скрипт</th><th>Статус</th><th>Последний замер</th></tr>
   {{range .Data}}
   <tr>
     <td><a href="/probes/{{.P.ID}}">{{.P.Name}}</a></td>

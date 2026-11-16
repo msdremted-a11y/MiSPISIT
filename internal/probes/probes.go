@@ -1,7 +1,7 @@
 // Пакет probes — конструктор eBPF-пробников (курсовая).
 // Из смысловых параметров (что наблюдаем, кого фильтруем, что считаем,
-// как часто) строит строку мини-языка и готовый скрипт bpftrace.
-// Произвольный код пользователь ввести не может: скрипт собирается
+// как часто) строит скрипт (строку предметного языка) и готовый код bpftrace.
+// Произвольный код пользователь ввести не может: bpftrace-скрипт собирается
 // только из проверенных шаблонов этого файла.
 package probes
 
@@ -17,9 +17,10 @@ import (
 
 // Event — тип наблюдаемого события ядра.
 type Event struct {
-	Code   string // то, что лежит в БД и в DSL
+	Code   string // то, что лежит в БД и в скрипте
 	Title  string // как показываем в форме
 	Tracep string // точка присоединения bpftrace
+	Pred   string // обязательный предикат точки (например, newstate == 2), может быть пустым
 }
 
 // Agg — способ агрегации событий за интервал.
@@ -30,11 +31,14 @@ type Agg struct {
 }
 
 // Events — каталог событий конструктора.
+// Подобрано под ядро WSL2: tracepoint tcp:tcp_connect в нём отсутствует,
+// поэтому исходящие соединения ловим через sock:inet_sock_set_state
+// с переходом в состояние SYN_SENT (newstate == 2).
 var Events = map[string]Event{
-	"syscall_read": {"syscall_read", "Чтение из файлов (системный вызов read)", "syscalls:sys_enter_read"},
-	"disk_io":      {"disk_io", "Дисковые операции (запросы к блочному устройству)", "block:block_rq_issue"},
-	"file_open":    {"file_open", "Открытие файлов (системный вызов openat)", "syscalls:sys_enter_openat"},
-	"net_connect":  {"net_connect", "Исходящие TCP-соединения", "tcp:tcp_connect"},
+	"syscall_read": {"syscall_read", "Чтение из файлов (системный вызов read)", "syscalls:sys_enter_read", ""},
+	"disk_io":      {"disk_io", "Дисковые операции (запросы к блочному устройству)", "block:block_rq_issue", ""},
+	"file_open":    {"file_open", "Открытие файлов (системный вызов openat)", "syscalls:sys_enter_openat", ""},
+	"net_connect":  {"net_connect", "Исходящие TCP-соединения", "sock:inet_sock_set_state", "args->newstate == 2"},
 }
 
 // Aggs — каталог агрегаций.
@@ -123,7 +127,7 @@ func Build(name, event, process, agg string, intervalS int) (storage.Probe, stri
 	return pr, ""
 }
 
-// dsl собирает строку мини-языка из параметров пробника.
+// dsl собирает скрипт (строку предметного языка) из параметров пробника.
 // Грамматика: on <event> [where process = <comm>] every <N>s <agg>.
 func dsl(pr storage.Probe) string {
 	var b strings.Builder
@@ -135,31 +139,40 @@ func dsl(pr storage.Probe) string {
 	return b.String()
 }
 
-// filter возвращает условие bpftrace по имени процесса или пустую строку.
-func filter(pr storage.Probe) string {
-	if pr.Process == "" {
+// predicate собирает условие bpftrace для точки присоединения:
+// обязательный предикат события (если есть) и фильтр по имени процесса
+// объединяются через &&, потому что два предиката подряд невалидны.
+func predicate(pr storage.Probe) string {
+	var parts []string
+	if p := Events[pr.Event].Pred; p != "" {
+		parts = append(parts, p)
+	}
+	if pr.Process != "" {
+		parts = append(parts, fmt.Sprintf("comm == \"%s\"", pr.Process))
+	}
+	if len(parts) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("/comm == \"%s\"/", pr.Process)
+	return "/" + strings.Join(parts, " && ") + "/"
 }
 
-// bpftrace собирает скрипт из шаблона. Каждый интервал скрипт печатает
-// одну строку "VALUE <число>" — её читает probe-runner и пишет в базу.
+// bpftrace собирает скрипт bpftrace из шаблона. Каждый интервал скрипт
+// печатает одну строку "VALUE <число>" — её читает probe-runner и пишет в базу.
 func bpftrace(pr storage.Probe) string {
 	tp := Events[pr.Event].Tracep
-	f := filter(pr)
+	p := predicate(pr)
 	iv := fmt.Sprintf("interval:s:%d", pr.IntervalS)
 
 	switch pr.Agg {
 	case "count":
 		return fmt.Sprintf(
 			"tracepoint:%s %s { @c = count(); }\n%s { print(@c); clear(@c); }",
-			tp, f, iv)
+			tp, p, iv)
 	case "bytes":
 		// сумма байт по дисковым запросам
 		return fmt.Sprintf(
 			"tracepoint:%s %s { @b = sum(args->bytes); }\n%s { print(@b); clear(@b); }",
-			tp, f, iv)
+			tp, p, iv)
 	case "avg_latency_ms":
 		// средняя задержка: вход в вызов запоминает время, выход считает дельту;
 		// stats хранит count/average/total, runner берёт average (нс) и переводит в мс
@@ -172,7 +185,7 @@ func bpftrace(pr storage.Probe) string {
 			"tracepoint:%s %s { @s[tid] = nsecs; }\n"+
 				"tracepoint:%s /%s/ { @lat = stats(nsecs - @s[tid]); delete(@s[tid]); }\n"+
 				"%s { print(@lat); clear(@lat); }",
-			tp, f, exit, pred, iv)
+			tp, p, exit, pred, iv)
 	}
 	return ""
 }
