@@ -1,0 +1,41 @@
+{{define "title"}}Аналитика — {{.Product}}{{end}}
+{{define "content"}}
+<h1>Аналитика за последние 24 часа</h1>
+{{with .Data}}
+
+<h2>Снимки нагрузки</h2>
+{{if .Snap.Count}}
+<table>
+  <tr><th></th><th>Загрузка CPU, %</th><th>Задержка IO, мс</th><th>IOPS</th></tr>
+  <tr><td>Среднее</td><td>{{printf "%.1f" .Snap.AvgCPU}}</td><td>{{printf "%.1f" .Snap.AvgLatency}}</td><td>{{printf "%.0f" .Snap.AvgIOPS}}</td></tr>
+  <tr><td>Максимум</td><td>{{printf "%.1f" .Snap.MaxCPU}}</td><td>{{printf "%.1f" .Snap.MaxLatency}}</td><td>{{printf "%.0f" .Snap.MaxIOPS}}</td></tr>
+</table>
+<p class="muted">Снимков за период: {{.Snap.Count}}.</p>
+{{else}}
+<p class="empty">Снимков за период нет — сохраните снимок или дождитесь снимка по расписанию.</p>
+{{end}}
+
+<h2>Пробники eBPF</h2>
+{{if .Probes}}
+<table>
+  <tr><th>Пробник</th><th>Замеров</th><th>Минимум</th><th>Среднее</th><th>Максимум</th></tr>
+  {{range .Probes}}
+  <tr>
+    <td>{{.Name}}</td>
+    <td>{{.Stats.Count}}</td>
+    <td>{{printf "%.2f" .Stats.Min}} {{.Unit}}</td>
+    <td>{{printf "%.2f" .Stats.Avg}} {{.Unit}}</td>
+    <td>{{printf "%.2f" .Stats.Max}} {{.Unit}}</td>
+  </tr>
+  {{end}}
+</table>
+{{else}}
+<p class="empty">Замеров пробников за период нет.</p>
+{{end}}
+
+<h2>Инциденты</h2>
+<p>Открыто за период: {{.Incidents.Opened}}, из них не закрыто: {{.Incidents.Open}}, закрыто: {{.Incidents.Closed}}.
+<a href="/incidents">Журнал инцидентов</a> · <a href="/report/incidents.pdf">PDF-отчёт за сутки</a></p>
+
+{{end}}
+{{end}}

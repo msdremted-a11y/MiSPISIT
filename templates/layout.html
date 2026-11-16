@@ -16,6 +16,9 @@
     <a href="/rejected" {{if eq .Active "rejected"}}class="active"{{end}}>Отказы</a>
     <a href="/notifications" {{if eq .Active "notifications"}}class="active"{{end}}>Уведомления</a>
     <a href="/probes" {{if eq .Active "probes"}}class="active"{{end}}>Пробники eBPF</a>
+    <a href="/rules" {{if eq .Active "rules"}}class="active"{{end}}>Правила</a>
+    <a href="/incidents" {{if eq .Active "incidents"}}class="active"{{end}}>Инциденты</a>
+    <a href="/analytics" {{if eq .Active "analytics"}}class="active"{{end}}>Аналитика</a>
     <a href="{{.Grafana}}">Панель Grafana</a>
   </nav>
 </header>

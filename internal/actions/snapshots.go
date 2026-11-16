@@ -34,6 +34,17 @@ type Store interface {
 	SetProbeStatus(id int, status string) error
 	DeleteProbe(id int) error
 	ListProbeSamples(probeID, limit int) ([]storage.ProbeSample, error)
+	AddRule(storage.Rule) (storage.Rule, error)
+	ListRules() ([]storage.Rule, map[int]string, error)
+	SetRuleStatus(id int, status string) error
+	DeleteRule(id int) error
+	AckIncident(id int) error
+	ListIncidents(limit int) ([]storage.Incident, error)
+	CountOpenIncidents() (int, error)
+	ProbeStatsSince(since time.Time) ([]storage.ProbeStats, error)
+	SnapshotStatsSince(since time.Time) (storage.SnapshotStats, error)
+	IncidentStatsSince(since time.Time) (storage.IncidentStats, error)
+	ListIncidentsSince(since time.Time) ([]storage.Incident, error)
 }
 
 // Input — данные формы /snapshots/new.

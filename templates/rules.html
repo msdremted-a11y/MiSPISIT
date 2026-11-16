@@ -1,0 +1,33 @@
+{{define "title"}}Правила алертинга — {{.Product}}{{end}}
+{{define "content"}}
+<h1>Правила алертинга</h1>
+<p class="muted">Если метрика снимка или замер пробника заданное число замеров подряд
+за порогом — открывается инцидент и приходит уведомление. Проверяет сервис worker.</p>
+{{if .Data}}
+<table>
+  <tr><th>Имя</th><th>Источник</th><th>Условие</th><th>Статус</th><th></th></tr>
+  {{range .Data}}
+  <tr>
+    <td>{{.R.Name}}</td>
+    <td>{{if .ProbeRef}}пробник «{{.ProbeRef}}»{{else}}{{.SourceT}}{{end}}</td>
+    <td>{{.R.Op}} {{.R.Threshold}} · {{.R.Intervals}} зам. подряд</td>
+    <td>{{if eq .R.Status "active"}}работает{{else}}на паузе{{end}}</td>
+    <td>
+      {{if eq .R.Status "active"}}
+      <form method="post" action="/rules/{{.R.ID}}/pause" class="inline"><button type="submit">Пауза</button></form>
+      {{else}}
+      <form method="post" action="/rules/{{.R.ID}}/resume" class="inline"><button type="submit">Возобновить</button></form>
+      {{end}}
+      <form method="post" action="/rules/{{.R.ID}}/delete" class="inline"
+            onsubmit="return confirm('Удалить правило вместе с инцидентами?');">
+        <button type="submit" class="danger">Удалить</button>
+      </form>
+    </td>
+  </tr>
+  {{end}}
+</table>
+{{else}}
+<p class="empty">Правил пока нет. Создайте первое — например, «CPU выше 90 % три замера подряд».</p>
+{{end}}
+<p><a class="button" href="/rules/new">Новое правило</a> <a href="/incidents">Журнал инцидентов</a></p>
+{{end}}

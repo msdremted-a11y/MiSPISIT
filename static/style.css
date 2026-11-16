@@ -35,5 +35,8 @@ td form.inline { margin: 0; }
 p.code-block { white-space: normal; }
 button.danger { background: #b3341f; }
 .actions-row { display: flex; gap: 12px; margin: 16px 0; }
+.cond-row { display: flex; gap: 8px; margin-top: 4px; }
+.cond-op { width: 40%; }
+.cond-th { width: 60%; margin-top: 0; }
 select { display: block; width: 100%; box-sizing: border-box; padding: 8px; margin-top: 4px; border: 1px solid #c7ccd6; border-radius: 6px; font: inherit; background: #fff; }
 h2 { margin-top: 28px; }

@@ -28,6 +28,20 @@ services:
       db:
         condition: service_healthy
 
+  # Фоновые задачи (курсовая): авто-снимки по расписанию и проверка
+  # правил алертинга. Тот же образ приложения, другая команда запуска.
+  worker:
+    build: .
+    image: troykins/qt-ebpf-monitor:0.1.0
+    command: ["worker"]
+    environment:
+      DATABASE_URL: postgres://app:app@db:5432/app?sslmode=disable
+      SNAPSHOT_INTERVAL_S: "300"
+      ALERT_INTERVAL_S: "10"
+    depends_on:
+      db:
+        condition: service_healthy
+
   db:
     image: postgres:16
     environment:

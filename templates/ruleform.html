@@ -1,0 +1,51 @@
+{{define "title"}}Новое правило — {{.Product}}{{end}}
+{{define "content"}}
+<h1>Новое правило алертинга</h1>
+{{with .Data}}
+{{$f := .F}}
+{{if $f.Err}}<p class="error">{{$f.Err}}</p>{{end}}
+<form method="post" action="/rules">
+  <fieldset>
+    <label>Имя правила
+      <input name="name" value="{{$f.Name}}" placeholder="например: высокая загрузка CPU" required>
+    </label>
+    <label>Источник данных
+      <select name="source" id="source">
+        {{range $.Data.Metrics}}
+        <option value="{{.}}" {{if eq $f.Source .}}selected{{end}}>{{index $.Data.Titles .}}</option>
+        {{end}}
+        <option value="probe" {{if eq $f.Source "probe"}}selected{{end}}>замер пробника eBPF</option>
+      </select>
+    </label>
+    <label id="probe-row">Пробник
+      <select name="probe_id" id="probe_id">
+        {{range $.Data.Probes}}
+        <option value="{{.ID}}" {{if eq $f.ProbeID .ID}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </label>
+    <label>Условие
+      <span class="cond-row">
+        <select name="op" class="cond-op">
+          <option value=">" {{if eq $f.Op ">"}}selected{{end}}>больше (&gt;)</option>
+          <option value="<" {{if eq $f.Op "<"}}selected{{end}}>меньше (&lt;)</option>
+        </select>
+        <input name="threshold" class="cond-th" value="{{$f.Threshold}}" placeholder="порог, например 90" required>
+      </span>
+    </label>
+    <label>Замеров подряд за порогом (1–100)
+      <input name="intervals" type="number" min="1" max="100" value="{{$f.Intervals}}">
+    </label>
+  </fieldset>
+  <button type="submit">Создать правило</button>
+</form>
+<script>
+function toggleProbe() {
+  var isProbe = document.getElementById("source").value === "probe";
+  document.getElementById("probe-row").style.display = isProbe ? "block" : "none";
+}
+document.getElementById("source").addEventListener("change", toggleProbe);
+toggleProbe();
+</script>
+{{end}}
+{{end}}

@@ -1,0 +1,28 @@
+{{define "title"}}Инциденты — {{.Product}}{{end}}
+{{define "content"}}
+<h1>Журнал инцидентов</h1>
+<p class="muted">Открываются правилами алертинга, закрываются сами, когда значение возвращается в норму.</p>
+{{if .Data}}
+<table>
+  <tr><th>№</th><th>Правило</th><th>Открыт</th><th>Закрыт</th><th>Статус</th><th>Последнее значение</th><th></th></tr>
+  {{range .Data}}
+  <tr{{if eq .Status "open"}} class="new"{{end}}>
+    <td>{{.ID}}</td>
+    <td>{{.RuleName}}</td>
+    <td>{{dt .OpenedAt}}</td>
+    <td>{{dtp .ClosedAt}}</td>
+    <td>{{if eq .Status "open"}}открыт{{else if eq .Status "ack"}}подтверждён{{else}}закрыт{{end}}</td>
+    <td>{{.LastValue}}</td>
+    <td>
+      {{if eq .Status "open"}}
+      <form method="post" action="/incidents/{{.ID}}/ack" class="inline"><button type="submit">Подтвердить</button></form>
+      {{end}}
+    </td>
+  </tr>
+  {{end}}
+</table>
+{{else}}
+<p class="empty">Инцидентов пока не было. Создайте правило алертинга — и нарушения появятся здесь.</p>
+{{end}}
+<p><a class="button" href="/rules">К правилам</a> <a href="/report/incidents.pdf">PDF-отчёт за сутки</a></p>
+{{end}}
