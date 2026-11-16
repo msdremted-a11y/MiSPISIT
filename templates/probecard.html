@@ -1,0 +1,47 @@
+{{define "title"}}Пробник «{{.Data.P.Name}}» — {{.Product}}{{end}}
+{{define "content"}}
+{{with .Data}}
+{{if .Saved}}<p class="ok">Пробник собран и запущен. Сервис probe-runner подхватит его в течение нескольких секунд.</p>{{end}}
+<h1>Пробник «{{.P.Name}}»</h1>
+<dl>
+  <dt>Статус</dt><dd>{{if eq .P.Status "active"}}работает{{else}}на паузе{{end}}</dd>
+  <dt>Что наблюдает</dt><dd>{{.EventT}}</dd>
+  <dt>Процесс</dt><dd>{{if .P.Process}}{{.P.Process}}{{else}}все процессы{{end}}</dd>
+  <dt>Что считает</dt><dd>{{.AggT}} ({{.Unit}})</dd>
+  <dt>Интервал</dt><dd>{{.P.IntervalS}} с</dd>
+  <dt>Создан</dt><dd>{{dt .P.CreatedAt}}</dd>
+</dl>
+
+<h2>Строка мини-языка</h2>
+<p class="code-block"><code>{{.P.DSL}}</code></p>
+
+<h2>Сгенерированный скрипт bpftrace</h2>
+<p class="muted">Собран из проверенного шаблона конструктора; выполняется сервисом probe-runner в привилегированном контейнере.</p>
+<pre class="code-block">{{.P.Bpftrace}}</pre>
+
+<h2>Последние замеры</h2>
+{{if .Samples}}
+<table>
+  <tr><th>Время</th><th>Значение</th></tr>
+  {{range .Samples}}
+  <tr><td>{{dt .At}}</td><td>{{.Value}} {{$.Data.Unit}}</td></tr>
+  {{end}}
+</table>
+{{else}}
+<p class="empty">Замеров пока нет — они появятся после первого интервала работы пробника.</p>
+{{end}}
+
+<div class="actions-row">
+  {{if eq .P.Status "active"}}
+  <form method="post" action="/probes/{{.P.ID}}/pause" class="inline"><button type="submit">Поставить на паузу</button></form>
+  {{else}}
+  <form method="post" action="/probes/{{.P.ID}}/resume" class="inline"><button type="submit">Возобновить</button></form>
+  {{end}}
+  <form method="post" action="/probes/{{.P.ID}}/delete" class="inline"
+        onsubmit="return confirm('Удалить пробник вместе с замерами?');">
+    <button type="submit" class="danger">Удалить</button>
+  </form>
+</div>
+<p><a href="/probes">Ко всем пробникам</a></p>
+{{end}}
+{{end}}

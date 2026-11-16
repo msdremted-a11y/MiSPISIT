@@ -1,0 +1,23 @@
+{{define "title"}}Пробники eBPF — {{.Product}}{{end}}
+{{define "content"}}
+<h1>Пробники eBPF</h1>
+<p class="muted">Датчики ядра Linux, собранные в конструкторе: система сама генерирует скрипт bpftrace,
+сервис probe-runner выполняет его и пишет замеры в базу.</p>
+{{if .Data}}
+<table>
+  <tr><th>Имя</th><th>Что наблюдает</th><th>Строка языка</th><th>Статус</th><th>Последний замер</th></tr>
+  {{range .Data}}
+  <tr>
+    <td><a href="/probes/{{.P.ID}}">{{.P.Name}}</a></td>
+    <td>{{.EventT}}{{if .P.Process}} · процесс {{.P.Process}}{{end}}</td>
+    <td><code>{{.P.DSL}}</code></td>
+    <td>{{if eq .P.Status "active"}}работает{{else}}на паузе{{end}}</td>
+    <td>{{if .HasLast}}{{.Last}} {{.Unit}}{{else}}замеров нет{{end}}</td>
+  </tr>
+  {{end}}
+</table>
+{{else}}
+<p class="empty">Пробников пока нет. Соберите первый в конструкторе — знать eBPF для этого не нужно.</p>
+{{end}}
+<p><a class="button" href="/probes/new">Собрать пробник</a></p>
+{{end}}

@@ -13,13 +13,14 @@ import (
 	"time"
 
 	"github.com/msdremted-a11y/MiSPISIT/internal/actions"
+	"github.com/msdremted-a11y/MiSPISIT/internal/probes"
 	"github.com/msdremted-a11y/MiSPISIT/internal/procstat"
 	"github.com/msdremted-a11y/MiSPISIT/internal/storage"
 )
 
 const (
 	product = "Системный монитор на базе eBPF + Qt"
-	version = "0.0.5"
+	version = "0.1.0"
 )
 
 type server struct {
@@ -62,7 +63,8 @@ func main() {
 		},
 	}
 	pages := map[string]*template.Template{}
-	for _, name := range []string{"index", "list", "form", "card", "rejected", "notifications", "notfound", "error"} {
+	for _, name := range []string{"index", "list", "form", "card", "rejected", "notifications",
+		"probes", "probeform", "probecard", "notfound", "error"} {
 		pages[name] = template.Must(template.New("layout.html").Funcs(funcs).ParseFiles(
 			filepath.Join(dir, "templates", "layout.html"),
 			filepath.Join(dir, "templates", name+".html"),
@@ -89,6 +91,13 @@ func main() {
 	mux.HandleFunc("GET /notifications", s.notifications)
 	mux.HandleFunc("POST /notifications/{id}/read", s.readNotification)
 	mux.HandleFunc("POST /notifications/read-all", s.readAllNotifications)
+	mux.HandleFunc("GET /probes", s.probeList)
+	mux.HandleFunc("GET /probes/new", s.probeForm)
+	mux.HandleFunc("POST /probes", s.probeCreate)
+	mux.HandleFunc("GET /probes/{id}", s.probeCard)
+	mux.HandleFunc("POST /probes/{id}/pause", s.probeSetStatus("paused"))
+	mux.HandleFunc("POST /probes/{id}/resume", s.probeSetStatus("active"))
+	mux.HandleFunc("POST /probes/{id}/delete", s.probeDelete)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir(filepath.Join(dir, "static")))))
 	mux.HandleFunc("/", s.notFound)
 
@@ -203,6 +212,141 @@ func (s *server) rejected(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) notFound(w http.ResponseWriter, r *http.Request) {
 	s.render(w, http.StatusNotFound, "notfound", "", "Страницы «"+r.URL.Path+"» нет.")
+}
+
+// ---------- Конструктор eBPF-пробников (курсовая) ----------
+
+// probeView — строка списка пробников.
+type probeView struct {
+	P       storage.Probe
+	HasLast bool
+	Last    float64
+	Unit    string
+	EventT  string
+}
+
+// GET /probes — список пробников с последними замерами.
+func (s *server) probeList(w http.ResponseWriter, r *http.Request) {
+	all, last, has, err := s.svc.Store.ListProbes()
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	items := make([]probeView, 0, len(all))
+	for _, p := range all {
+		items = append(items, probeView{
+			P: p, HasLast: has[p.ID], Last: last[p.ID],
+			Unit: probes.Aggs[p.Agg].Unit, EventT: probes.Events[p.Event].Title,
+		})
+	}
+	s.render(w, http.StatusOK, "probes", "probes", items)
+}
+
+// probeFormData — данные формы конструктора (и при первом показе, и при ошибке).
+type probeFormData struct {
+	Err      string
+	Name     string
+	Event    string
+	Process  string
+	Agg      string
+	Interval int
+}
+
+// GET /probes/new — форма конструктора.
+func (s *server) probeForm(w http.ResponseWriter, r *http.Request) {
+	s.renderProbeForm(w, probeFormData{Event: "syscall_read", Agg: "count", Interval: 10})
+}
+
+func (s *server) renderProbeForm(w http.ResponseWriter, d probeFormData) {
+	allowed := map[string][]probes.Agg{}
+	for _, code := range probes.EventCodes() {
+		allowed[code] = probes.AllowedAggs(code)
+	}
+	s.render(w, http.StatusOK, "probeform", "probes", map[string]any{
+		"F": d, "Events": probes.Events, "Order": probes.EventCodes(), "Allowed": allowed,
+	})
+}
+
+// POST /probes — собрать пробник из параметров формы.
+func (s *server) probeCreate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "неверная форма", http.StatusBadRequest)
+		return
+	}
+	interval, _ := strconv.Atoi(r.FormValue("interval_s"))
+	d := probeFormData{
+		Name: r.FormValue("name"), Event: r.FormValue("event"),
+		Process: r.FormValue("process"), Agg: r.FormValue("agg"), Interval: interval,
+	}
+	pr, msg := probes.Build(d.Name, d.Event, d.Process, d.Agg, d.Interval)
+	if msg != "" {
+		d.Err = msg
+		s.renderProbeForm(w, d)
+		return
+	}
+	saved, err := s.svc.Store.AddProbe(pr)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/probes/"+strconv.Itoa(saved.ID)+"?saved=1", http.StatusSeeOther)
+}
+
+// GET /probes/{id} — карточка пробника: параметры, DSL, bpftrace, замеры.
+func (s *server) probeCard(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err == nil {
+		var pr storage.Probe
+		pr, err = s.svc.Store.GetProbe(id)
+		if err == nil {
+			samples, serr := s.svc.Store.ListProbeSamples(id, 50)
+			if serr != nil {
+				s.fail(w, serr)
+				return
+			}
+			s.render(w, http.StatusOK, "probecard", "probes", map[string]any{
+				"P": pr, "Samples": samples, "Saved": r.URL.Query().Get("saved") == "1",
+				"Unit": probes.Aggs[pr.Agg].Unit, "EventT": probes.Events[pr.Event].Title,
+				"AggT": probes.Aggs[pr.Agg].Title,
+			})
+			return
+		}
+		if !errors.Is(err, storage.ErrNotFound) {
+			s.fail(w, err)
+			return
+		}
+	}
+	s.render(w, http.StatusNotFound, "notfound", "", "Пробника с номером «"+r.PathValue("id")+"» нет.")
+}
+
+// probeSetStatus возвращает обработчик паузы/возобновления пробника.
+func (s *server) probeSetStatus(status string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.Atoi(r.PathValue("id"))
+		if err != nil {
+			s.render(w, http.StatusNotFound, "notfound", "", "Пробника «"+r.PathValue("id")+"» нет.")
+			return
+		}
+		if err := s.svc.Store.SetProbeStatus(id, status); err != nil && !errors.Is(err, storage.ErrNotFound) {
+			s.fail(w, err)
+			return
+		}
+		http.Redirect(w, r, "/probes/"+strconv.Itoa(id), http.StatusSeeOther)
+	}
+}
+
+// POST /probes/{id}/delete — удалить пробник вместе с замерами.
+func (s *server) probeDelete(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		s.render(w, http.StatusNotFound, "notfound", "", "Пробника «"+r.PathValue("id")+"» нет.")
+		return
+	}
+	if err := s.svc.Store.DeleteProbe(id); err != nil {
+		s.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/probes", http.StatusSeeOther)
 }
 
 // noteView — строка таблицы уведомлений.

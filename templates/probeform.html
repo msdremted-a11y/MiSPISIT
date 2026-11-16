@@ -1,0 +1,54 @@
+{{define "title"}}Конструктор пробника — {{.Product}}{{end}}
+{{define "content"}}
+<h1>Конструктор пробника</h1>
+<p class="muted">Выберите, что наблюдать в ядре Linux. Скрипт eBPF (bpftrace) система
+соберёт сама из проверенных шаблонов — его текст будет виден в карточке пробника.</p>
+{{with .Data}}
+{{$f := .F}}
+{{if $f.Err}}<p class="error">{{$f.Err}}</p>{{end}}
+<form method="post" action="/probes">
+  <fieldset>
+    <label>Имя пробника
+      <input name="name" value="{{$f.Name}}" placeholder="например: диск postgres" required>
+    </label>
+    <label>Что наблюдаем
+      <select name="event" id="event">
+        {{range $code := .Order}}
+        <option value="{{$code}}" {{if eq $f.Event $code}}selected{{end}}>{{(index $.Data.Events $code).Title}}</option>
+        {{end}}
+      </select>
+    </label>
+    <label>Только процесс (необязательно)
+      <input name="process" value="{{$f.Process}}" placeholder="имя процесса, например postgres">
+    </label>
+    <label>Что считаем
+      <select name="agg" id="agg"></select>
+    </label>
+    <label>Интервал замера, секунд (1–3600)
+      <input name="interval_s" type="number" min="1" max="3600" value="{{$f.Interval}}">
+    </label>
+  </fieldset>
+  <button type="submit">Собрать и запустить</button>
+</form>
+<script>
+// Варианты агрегаций для каждого события (подготовлены сервером).
+var allowed = {
+{{range .Order}}  "{{.}}": [{{range index $.Data.Allowed .}}{Code:"{{.Code}}", Title:"{{.Title}}"},{{end}}],
+{{end}}};
+var curAgg = "{{.F.Agg}}";
+function fillAggs() {
+  var ev = document.getElementById("event").value;
+  var sel = document.getElementById("agg");
+  sel.innerHTML = "";
+  (allowed[ev] || []).forEach(function(a) {
+    var o = document.createElement("option");
+    o.value = a.Code; o.textContent = a.Title;
+    if (a.Code === curAgg) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+document.getElementById("event").addEventListener("change", function() { curAgg = ""; fillAggs(); });
+fillAggs();
+</script>
+{{end}}
+{{end}}

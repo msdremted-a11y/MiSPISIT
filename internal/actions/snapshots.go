@@ -28,6 +28,12 @@ type Store interface {
 	MarkNotificationRead(id int) error
 	MarkAllNotificationsRead() error
 	CountUnreadNotifications() (int, error)
+	AddProbe(storage.Probe) (storage.Probe, error)
+	ListProbes() ([]storage.Probe, map[int]float64, map[int]bool, error)
+	GetProbe(id int) (storage.Probe, error)
+	SetProbeStatus(id int, status string) error
+	DeleteProbe(id int) error
+	ListProbeSamples(probeID, limit int) ([]storage.ProbeSample, error)
 }
 
 // Input — данные формы /snapshots/new.

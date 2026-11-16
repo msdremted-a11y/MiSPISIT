@@ -42,6 +42,30 @@ type Notification struct {
 	Status     string // "new" — ещё не прочитано, "read" — прочитано
 }
 
+// Probe — пробник eBPF, собранный в конструкторе (курсовая).
+// Пользователь задаёт смысловые параметры, система сама генерирует
+// строку мини-языка (DSL) и скрипт bpftrace.
+type Probe struct {
+	ID        int
+	Name      string // имя пробника, которое дал пользователь
+	Event     string // syscall_read, disk_io, file_open, net_connect
+	Process   string // фильтр по имени процесса (comm), пусто = все процессы
+	Agg       string // count, bytes, avg_latency_ms
+	IntervalS int    // период снятия замера, секунды
+	DSL       string // строка мини-языка, сгенерированная из параметров
+	Bpftrace  string // сгенерированный скрипт bpftrace
+	Status    string // active — работает, paused — на паузе
+	CreatedAt time.Time
+}
+
+// ProbeSample — один замер работающего пробника.
+type ProbeSample struct {
+	ID      int
+	ProbeID int
+	At      time.Time
+	Value   float64
+}
+
 // ErrNotFound — записи с таким номером нет.
 var ErrNotFound = errors.New("запись не найдена")
 
@@ -72,7 +96,28 @@ CREATE TABLE IF NOT EXISTS notification (
     message     TEXT        NOT NULL,
     status      TEXT        NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'read'))
 );
-CREATE INDEX IF NOT EXISTS notification_at_idx ON notification (at DESC);`
+CREATE INDEX IF NOT EXISTS notification_at_idx ON notification (at DESC);
+
+CREATE TABLE IF NOT EXISTS probe (
+    id         SERIAL PRIMARY KEY,
+    name       TEXT        NOT NULL,
+    event      TEXT        NOT NULL CHECK (event IN ('syscall_read', 'disk_io', 'file_open', 'net_connect')),
+    process    TEXT        NOT NULL DEFAULT '',
+    agg        TEXT        NOT NULL CHECK (agg IN ('count', 'bytes', 'avg_latency_ms')),
+    interval_s INTEGER     NOT NULL CHECK (interval_s BETWEEN 1 AND 3600),
+    dsl        TEXT        NOT NULL,
+    bpftrace   TEXT        NOT NULL,
+    status     TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS probe_sample (
+    id       SERIAL PRIMARY KEY,
+    probe_id INTEGER        NOT NULL REFERENCES probe (id) ON DELETE CASCADE,
+    at       TIMESTAMPTZ    NOT NULL DEFAULT now(),
+    value    DOUBLE PRECISION NOT NULL
+);
+CREATE INDEX IF NOT EXISTS probe_sample_probe_at_idx ON probe_sample (probe_id, at DESC);`
 
 // Postgres хранит снимки и отказы в PostgreSQL.
 type Postgres struct{ db *sql.DB }
@@ -241,4 +286,119 @@ func (p *Postgres) CountUnreadNotifications() (int, error) {
 	var n int
 	err := p.db.QueryRow(`SELECT count(*) FROM notification WHERE status = 'new'`).Scan(&n)
 	return n, err
+}
+
+// AddProbe сохраняет пробник и возвращает его с номером, который выдала база.
+func (p *Postgres) AddProbe(pr Probe) (Probe, error) {
+	if pr.Status == "" {
+		pr.Status = "active"
+	}
+	err := p.db.QueryRow(
+		`INSERT INTO probe (name, event, process, agg, interval_s, dsl, bpftrace, status)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, created_at`,
+		pr.Name, pr.Event, pr.Process, pr.Agg, pr.IntervalS, pr.DSL, pr.Bpftrace, pr.Status,
+	).Scan(&pr.ID, &pr.CreatedAt)
+	return pr, err
+}
+
+// ListProbes возвращает все пробники и последний замер каждого (0, если замеров нет).
+func (p *Postgres) ListProbes() ([]Probe, map[int]float64, map[int]bool, error) {
+	rows, err := p.db.Query(
+		`SELECT id, name, event, process, agg, interval_s, dsl, bpftrace, status, created_at
+		 FROM probe ORDER BY id`)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer rows.Close()
+	var out []Probe
+	for rows.Next() {
+		var pr Probe
+		if err := rows.Scan(&pr.ID, &pr.Name, &pr.Event, &pr.Process, &pr.Agg,
+			&pr.IntervalS, &pr.DSL, &pr.Bpftrace, &pr.Status, &pr.CreatedAt); err != nil {
+			return nil, nil, nil, err
+		}
+		out = append(out, pr)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, nil, err
+	}
+	last := map[int]float64{}
+	has := map[int]bool{}
+	srows, err := p.db.Query(
+		`SELECT DISTINCT ON (probe_id) probe_id, value
+		 FROM probe_sample ORDER BY probe_id, at DESC`)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer srows.Close()
+	for srows.Next() {
+		var id int
+		var v float64
+		if err := srows.Scan(&id, &v); err != nil {
+			return nil, nil, nil, err
+		}
+		last[id] = v
+		has[id] = true
+	}
+	return out, last, has, srows.Err()
+}
+
+// GetProbe возвращает один пробник по номеру.
+func (p *Postgres) GetProbe(id int) (Probe, error) {
+	var pr Probe
+	err := p.db.QueryRow(
+		`SELECT id, name, event, process, agg, interval_s, dsl, bpftrace, status, created_at
+		 FROM probe WHERE id = $1`, id,
+	).Scan(&pr.ID, &pr.Name, &pr.Event, &pr.Process, &pr.Agg,
+		&pr.IntervalS, &pr.DSL, &pr.Bpftrace, &pr.Status, &pr.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return pr, ErrNotFound
+	}
+	return pr, err
+}
+
+// SetProbeStatus переводит пробник в состояние active/paused.
+func (p *Postgres) SetProbeStatus(id int, status string) error {
+	res, err := p.db.Exec(`UPDATE probe SET status = $1 WHERE id = $2`, status, id)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteProbe удаляет пробник вместе с замерами (ON DELETE CASCADE).
+func (p *Postgres) DeleteProbe(id int) error {
+	_, err := p.db.Exec(`DELETE FROM probe WHERE id = $1`, id)
+	return err
+}
+
+// AddProbeSample записывает замер пробника.
+func (p *Postgres) AddProbeSample(s ProbeSample) error {
+	_, err := p.db.Exec(
+		`INSERT INTO probe_sample (probe_id, at, value) VALUES ($1, $2, $3)`,
+		s.ProbeID, s.At, s.Value)
+	return err
+}
+
+// ListProbeSamples возвращает последние замеры пробника, новые сверху.
+func (p *Postgres) ListProbeSamples(probeID, limit int) ([]ProbeSample, error) {
+	rows, err := p.db.Query(
+		`SELECT id, probe_id, at, value FROM probe_sample
+		 WHERE probe_id = $1 ORDER BY at DESC, id DESC LIMIT $2`, probeID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ProbeSample
+	for rows.Next() {
+		var s ProbeSample
+		if err := rows.Scan(&s.ID, &s.ProbeID, &s.At, &s.Value); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
 }
